@@ -40,14 +40,15 @@ func init() {
 	// is called directly, e.g.:
 	// loginCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
-func login(cmd *cobra.Command, args []string) {
-	config := createConfig("")
+func login(cmd *cobra.Command, args []string) {kubeConfigPath, err := cmd.Flags().GetString("kubeconfig")
+	if err != nil {
+		log.Fatalf("Can't get kubeConfigPath, because %v", err)
+	}
+	config := createConfig(kubeConfigPath)
 	registryName := args[0]
 
-	err := config.CheckAccessToRegistry(registryUser, registryPassword, registryName, privateRegistry)
+	err = config.CheckAccessToRegistry(registryUser, registryPassword, registryName)
 	if err != nil {
 		log.Errorf("Can't log into registry %v, because %v", registryName, err)
-	} else {
-		log.Infof("Successfully logged into registry %v", registryName)
 	}
 }

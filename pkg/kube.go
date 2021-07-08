@@ -2,8 +2,8 @@ package pkg
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"github.com/containers/common/pkg/auth"
 	"github.com/containers/image/v5/docker"
 	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/types"
@@ -68,12 +68,20 @@ func (c Config) GetImageOfContainers(namespaces []string) (map[string]string, er
 	}
 	return podImages, nil
 }
-func (c *Config) CheckAccessToRegistry(username string, password string, registryName string, private bool) error {
-
-	if (password == "" || username == "") && (private == true) {
-		return errors.New("can't have empty user or password when registry is private")
+func (c *Config) CheckAccessToRegistry(username string, password string, registryName string) error {
+	opts := &auth.LoginOptions{
+		Username: username,
+		Stdin: os.Stdin,
+		Stdout: os.Stdout,
 	}
-	return docker.CheckAuth(c.Ctx, c.SysCtx, username, password, registryName)
+	if password != "" {
+		opts.Password = password
+	}
+	return auth.Login(c.Ctx, c.SysCtx, opts, []string{registryName})
+	//if (password == "" || username == "") && (private == true) {
+	//	return errors.New("can't have empty user or password when registry is private")
+	//}
+	//return docker.CheckAuth(c.Ctx, c.SysCtx, username, password, registryName)
 
 }
 
