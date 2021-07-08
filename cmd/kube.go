@@ -2,19 +2,22 @@ package cmd
 
 import (
 	"context"
+	"image-checker-k8s/pkg"
+	"os"
+	"strings"
+	"sync"
+	"text/tabwriter"
+
 	"github.com/containers/common/pkg/auth"
 	"github.com/containers/image/v5/docker"
 	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/types"
 	"github.com/opencontainers/go-digest"
 	log "github.com/sirupsen/logrus"
-	"image-checker-k8s/pkg"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"os"
-	"strings"
-	"text/tabwriter"
 )
 
 type Config struct {
@@ -67,11 +70,35 @@ func (opts *Options) GetImageOfContainers(namespaces []string) (podImages map[st
 	tabWriter := opts.Config.TabWriter
 	podImages = make(map[string]string)
 
-	err = pkg.TabWriterInit("Pod\tImage\tInstalled Digest\tRegistry Digest\tNamespace", tabWriter)
+	err = pkg.TabWriterInit("Image\tInstalled Digest\tRegistry Digest", tabWriter)
 	if err != nil {
 		return nil, err
 	}
 
+	c := make(chan v1.ContainerStatus)
+	var wg sync.WaitGroup
+	wg.Add(10)
+	for ii := 0; ii < 10; ii++ {
+		go func(c chan v1.ContainerStatus) {
+			for {
+				currentContainer, more := <-c
+				if more == false {
+					wg.Done()
+					return
+				}
+
+				//Name of Image (ex. docker.io/library/nginx:latest)
+				imageID := currentContainer.Image
+
+				installedDigest := strings.Split(currentContainer.ImageID, "@")[1]
+				podImages[currentContainer.Name] = imageID
+				registryDigest := opts.GetDigest(imageID)
+
+				//print to stdout
+				err = pkg.TabWriterWrite([]string{imageID, installedDigest[:25], registryDigest.String()[:25]}, tabWriter)
+			}
+		}(c)
+	}
 	for _, namespace := range namespaces {
 		pods, err := opts.Config.KubeClient.CoreV1().Pods(namespace).List(opts.Config.Ctx, metav1.ListOptions{})
 		if err != nil {
@@ -79,22 +106,14 @@ func (opts *Options) GetImageOfContainers(namespaces []string) (podImages map[st
 		}
 		for _, pod := range pods.Items {
 			for _, container := range pod.Status.ContainerStatuses {
-				//Name of Image (ex. docker.io/library/nginx:latest)
-				imageID := container.Image
-
-				installedDigest := strings.Split(container.ImageID, "@")[1]
-				podImages[container.Name] = imageID
-				registryDigest := opts.GetDigest(imageID)
-
-				//print to stdout
-				err = pkg.TabWriterWrite([]string{pod.Name, imageID, installedDigest[:25], registryDigest.String()[:25], namespace}, tabWriter)
-				if err != nil {
-					return nil, err
-				}
+				c <- container
 			}
 		}
 
 	}
+	close(c)
+	wg.Wait()
+
 	err = tabWriter.Flush()
 	if err != nil {
 		return nil, err
