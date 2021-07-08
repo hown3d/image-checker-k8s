@@ -28,7 +28,6 @@ func (opts *RegistryOption) GetDigests(image, imageID string, sysCtx *types.Syst
 }
 
 func (opts *RegistryOption) IsNewImage(image, imageID string, sysCtx *types.SystemContext) bool {
-	log.Infof("isNewImage Image %v", image)
 	installedDigest, registryDigest := opts.GetDigests(image, imageID, sysCtx)
 	if installedDigest != registryDigest {
 		return true
@@ -60,10 +59,8 @@ func (opts *RegistryOption) LoginToRegistry(registryName string, sysCtx *types.S
 
 func (opts *RegistryOption) GetRegistryDigest(imageName string, sysCtx *types.SystemContext) *digest.Digest {
 
-	log.Infof("ImageName before split %v", imageName)
 	//Image can include digest (from earlier update)
 	imageName = strings.Split(imageName, "@")[0]
-	log.Infof("ImageName after split %v", imageName)
 	_, exists := opts.DigestChache[imageName]
 	if exists == true {
 		return opts.DigestChache[imageName]
