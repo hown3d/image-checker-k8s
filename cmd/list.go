@@ -1,18 +1,4 @@
-/*
-Copyright © 2021 NAME HERE <EMAIL ADDRESS>
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cmd
 
 import (
@@ -50,9 +36,13 @@ func init() {
 	listCmd.Flags().StringSliceVarP(&namespaces, "namespaces", "n", []string{"default"}, "namespaces to look for pods in")
 }
 func listPods(cmd *cobra.Command, args []string) {
-	config := createConfig(cmd)
+	kubeConfigPath, err := cmd.Flags().GetString("kubeconfig")
+	if err != nil {
+		log.Fatalf("Can't get kubeConfigPath, because %v", err)
+	}
+	config := createConfig(kubeConfigPath)
 
-	_, err := config.GetImageOfContainers(namespaces)
+	_, err = config.GetImageOfContainers(namespaces)
 	if err != nil {
 		log.Errorf("Can't get Image of Containers, because %v", err)
 	}

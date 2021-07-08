@@ -26,12 +26,11 @@ type Config struct {
 
 func CreateClientSet(kubeConfigPath string) (clientset *kubernetes.Clientset, err error) {
 	// kubeconfig is set to the current set context in kubeConfig File
+	//If neither masterUrl or kubeconfigPath are passed in we fallback to inClusterConfig. If inClusterConfig fails, we fallback to the default config.
 	kubeConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	clientset, err = kubernetes.NewForConfig(kubeConfig)
 	return
 }
-
-
 
 func (c Config) GetImageOfContainers(namespaces []string) (map[string]string, error) {
 	c.TabWriter.Init(os.Stdout, 0, 8, 0, '\t', 0)
@@ -61,8 +60,6 @@ func (c Config) GetImageOfContainers(namespaces []string) (map[string]string, er
 
 
 	}
-
-
 
 	err = c.TabWriter.Flush()
 	if err != nil {

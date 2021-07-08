@@ -51,6 +51,7 @@ to quickly create a Cobra application.`,
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
+		log.Fatalf("Can't execute root command!")
 	}
 }
 
@@ -102,12 +103,8 @@ func initConfig() {
 	}
 }
 
-func createConfig(cmd *cobra.Command) *pkg.Config {
+func createConfig(kubeConfigPath string) *pkg.Config {
 
-	kubeConfigPath, err := cmd.Flags().GetString("kubeconfig")
-	if err != nil {
-		log.Errorf("Can't get kubeconfig file path from flags, because %v", err)
-	}
 	kubeConfig, err := pkg.CreateClientSet(kubeConfigPath)
 	if err != nil {
 		log.Errorf("Can't create new kubernetes ClientSet")
