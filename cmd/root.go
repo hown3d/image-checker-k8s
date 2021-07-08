@@ -1,20 +1,17 @@
 package cmd
 
 import (
-	"context"
-	"github.com/containers/image/v5/types"
 	"github.com/opencontainers/go-digest"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"image-checker-k8s/pkg"
 	"k8s.io/client-go/util/homedir"
 	"os"
 	"path/filepath"
-	"text/tabwriter"
 )
 
-var cfgFile, kubeConfig string
+
+var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -34,6 +31,7 @@ to quickly create a Cobra application.`,
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+
 	err := rootCmd.Execute()
 	if err != nil {
 		log.Fatalf("Can't execute root command!")
@@ -43,20 +41,34 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
+	opts := Options{
+		DigestChache: make(map[string]*digest.Digest),
+		RegOptions: &registryOptions{},
+	}
+
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
 	if home := homedir.HomeDir(); home != "" {
-		rootCmd.PersistentFlags().StringVar(&kubeConfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+		rootCmd.PersistentFlags().StringVar(&opts.KubeConfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {
-		rootCmd.PersistentFlags().StringVar(&kubeConfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+		rootCmd.PersistentFlags().StringVar(&opts.KubeConfig, "kubeconfig", "", "absolute path to the kubeconfig file")
 	}
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.image-checker-k8s.yaml)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+
+	//Add all subcommands
+	rootCmd.AddCommand(
+		loginCmd(&opts),
+		updateCmd(&opts),
+		listCmd(&opts),
+		logoutCmd(&opts),
+		)
+
 }
 
 
@@ -88,18 +100,3 @@ func initConfig() {
 	}
 }
 
-func createConfig(kubeConfigPath string) *pkg.Config {
-
-	kubeConfig, err := pkg.CreateClientSet(kubeConfigPath)
-	if err != nil {
-		log.Errorf("Can't create new kubernetes ClientSet")
-	}
-
-	return &pkg.Config{
-		Ctx: context.Background(),
-		SysCtx: &types.SystemContext{},
-		KubeClient: kubeConfig,
-		TabWriter: new(tabwriter.Writer),
-		DigestChache: make(map[string]*digest.Digest),
-	}
-}

@@ -1,4 +1,4 @@
-package pkg
+package cmd
 
 import (
 	"context"
@@ -21,7 +21,21 @@ type Config struct {
 	SysCtx     *types.SystemContext
 	KubeClient *kubernetes.Clientset
 	TabWriter  *tabwriter.Writer
-	DigestChache map[string]*digest.Digest
+
+}
+type registryOptions struct {
+	RegistryPassword string
+	RegistryUser string
+	AuthFile string
+	LogOutFromAllRegistries bool
+}
+
+type Options struct {
+	RegOptions *registryOptions
+	KubeConfig       string
+	Config           *Config
+	DigestChache     map[string]*digest.Digest
+	Namespaces	[]string
 }
 
 func CreateClientSet(kubeConfigPath string) (clientset *kubernetes.Clientset, err error) {
@@ -32,9 +46,28 @@ func CreateClientSet(kubeConfigPath string) (clientset *kubernetes.Clientset, er
 	return
 }
 
-func (c Config) GetImageOfContainers(namespaces []string) (map[string]string, error) {
-	c.TabWriter.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	_, err := fmt.Fprintln(c.TabWriter, "Pod\tImage\tDigest\tNamespace")
+func (opts *Options) createConfig() {
+
+	clientSet, err := CreateClientSet(opts.KubeConfig)
+	if err != nil {
+		log.Errorf("Can't create new kubernetes ClientSet")
+	}
+
+	opts.Config = &Config{
+		Ctx: context.Background(),
+		SysCtx: &types.SystemContext{
+			AuthFilePath: opts.RegOptions.AuthFile,
+		},
+		KubeClient:   clientSet,
+		TabWriter:    new(tabwriter.Writer),
+	}
+}
+
+func (opts *Options) GetImageOfContainers(namespaces []string) (map[string]string, error) {
+	tabWriter := opts.Config.TabWriter
+
+	tabWriter.Init(os.Stdout, 0, 8, 0, '\t', 0)
+	_, err := fmt.Fprintln(tabWriter, "Pod\tImage\tDigest\tNamespace")
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +76,7 @@ func (c Config) GetImageOfContainers(namespaces []string) (map[string]string, er
 
 
 	for _, namespace := range namespaces {
-		pods, err := c.KubeClient.CoreV1().Pods(namespace).List(c.Ctx, metav1.ListOptions{})
+		pods, err := opts.Config.KubeClient.CoreV1().Pods(namespace).List(opts.Config.Ctx, metav1.ListOptions{})
 		if err != nil {
 			return podImages, err
 		}
@@ -53,42 +86,38 @@ func (c Config) GetImageOfContainers(namespaces []string) (map[string]string, er
 					imageID := container.Image
 
 					podImages[container.Name] = imageID
-					imageDigest := c.GetDigest(imageID)
-					fmt.Fprintf(c.TabWriter, "%v\t%v\t%v\t%v\t\n", pod.Name, imageID, imageDigest.String(), namespace)
+					imageDigest := opts.GetDigest(imageID)
+					fmt.Fprintf(tabWriter, "%v\t%v\t%v\t%v\t\n", pod.Name, imageID, imageDigest.String(), namespace)
 				}
 			}
 
 
 	}
-
-	err = c.TabWriter.Flush()
+	err = tabWriter.Flush()
 	if err != nil {
 		return nil, err
 
 	}
 	return podImages, nil
 }
-func (c *Config) CheckAccessToRegistry(username string, password string, registryName string) error {
-	opts := &auth.LoginOptions{
-		Username: username,
+
+func (opts *Options) LoginToRegistry(registryName string) error {
+	loginOpts := &auth.LoginOptions{
+		Username: opts.RegOptions.RegistryUser,
 		Stdin: os.Stdin,
 		Stdout: os.Stdout,
 	}
-	if password != "" {
-		opts.Password = password
+	if opts.RegOptions.RegistryPassword != "" {
+		loginOpts.Password = opts.RegOptions.RegistryPassword
 	}
-	return auth.Login(c.Ctx, c.SysCtx, opts, []string{registryName})
-	//if (password == "" || username == "") && (private == true) {
-	//	return errors.New("can't have empty user or password when registry is private")
-	//}
-	//return docker.CheckAuth(c.Ctx, c.SysCtx, username, password, registryName)
-
+	return auth.Login(opts.Config.Ctx, opts.Config.SysCtx, loginOpts, []string{registryName})
 }
 
-func (c *Config) GetDigest(imageName string) *digest.Digest {
-	_, exists := c.DigestChache[imageName]
+
+func (opts *Options) GetDigest(imageName string) *digest.Digest {
+	_, exists := opts.DigestChache[imageName]
 	if exists == true {
-		return c.DigestChache[imageName]
+		return opts.DigestChache[imageName]
 	}
 
 	reference, err := docker.ParseReference("//" + imageName)
@@ -96,7 +125,7 @@ func (c *Config) GetDigest(imageName string) *digest.Digest {
 		log.Fatalf("Can't parse reference on %v, because %v", imageName, err)
 	}
 
-	image, err := reference.NewImage(c.Ctx, c.SysCtx)
+	image, err := reference.NewImage(opts.Config.Ctx, opts.Config.SysCtx)
 	if err != nil {
 		log.Fatalf("Can't create new Image, because %v", err)
 	}
@@ -109,7 +138,7 @@ func (c *Config) GetDigest(imageName string) *digest.Digest {
 		}
 	}(image)
 
-	manifestBytes, _, err := image.Manifest(c.Ctx)
+	manifestBytes, _, err := image.Manifest(opts.Config.Ctx)
 	if err != nil {
 		log.Errorf("Can't get manifest of image %v, because %v", imageName, err)
 	}
@@ -119,7 +148,7 @@ func (c *Config) GetDigest(imageName string) *digest.Digest {
 		log.Errorf("Can't get Digest of image %v, because %v", imageName, err)
 	}
 
-	c.DigestChache[imageName] = &imageDigest
+	opts.DigestChache[imageName] = &imageDigest
 
 	return &imageDigest
 }
