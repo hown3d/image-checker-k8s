@@ -38,7 +38,7 @@ func (opts *Options) list(_ *cobra.Command, _ []string) {
 		log.Errorf("Can't write to tabWriter, because %v", err)
 	}
 
-	err = opts.K8s.GetImageOfContainers(opts.K8s.Namespaces, &metav1.ListOptions{}, tabWriter, opts.SysCtx)
+	err = opts.K8s.GetImageOfContainers(&metav1.ListOptions{}, tabWriter, opts.SysCtx)
 	if err != nil {
 		log.Errorf("Can't get Image of Containers, because %v", err)
 	}

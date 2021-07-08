@@ -6,7 +6,8 @@ import (
 	"strings"
 	"text/tabwriter"
 )
-func TabWriterInit(header string, tabWriter *tabwriter.Writer) error{
+
+func TabWriterInit(header string, tabWriter *tabwriter.Writer) error {
 
 	tabWriter.Init(os.Stdout, 0, 8, 0, '\t', 0)
 	_, err := fmt.Fprintln(tabWriter, header)
@@ -22,4 +23,5 @@ func TabWriterWrite(toPrint []string, tabWriter *tabwriter.Writer) error {
 		return err
 	}
 	return nil
+
 }
