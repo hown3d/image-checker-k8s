@@ -1,7 +1,7 @@
 package main
 
 import (
-	"image-checker-k8s/cmd"
+	"github.com/hown3d/image-checker-k8s/cmd"
 )
 
 func main() {
@@ -9,6 +9,3 @@ func main() {
 
 	cmd.Execute()
 }
-
-
-

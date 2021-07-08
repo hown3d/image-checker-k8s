@@ -5,9 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
-
-func loginCmd(opts *Options) *cobra.Command{
+func loginCmd(opts *Options) *cobra.Command {
 
 	// cmd represents the login command
 	var cmd = &cobra.Command{
@@ -19,20 +17,19 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-		Run: opts.login,
+		Run:  opts.login,
 		Args: cobra.ExactArgs(1),
 	}
-	cmd.Flags().StringVarP(&opts.RegOptions.RegistryUser, "username", "u","", "username to login to registry (required if registry = true)")
-	cmd.Flags().StringVarP(&opts.RegOptions.RegistryPassword, "password", "p", "", "password to login to registry")
+	cmd.Flags().StringVarP(&opts.K8s.RegistryOpts.RegistryUser, "username", "u", "", "username to login to registry (required if registry = true)")
+	cmd.Flags().StringVarP(&opts.K8s.RegistryOpts.RegistryPassword, "password", "p", "", "password to login to registry")
 	return cmd
 }
 
-
 func (opts *Options) login(_ *cobra.Command, args []string) {
-	opts.createConfig()
+
 	registryName := args[0]
 
-	err := opts.LoginToRegistry(registryName)
+	err := opts.K8s.RegistryOpts.LoginToRegistry(registryName, opts.SysCtx)
 	if err != nil {
 		log.Errorf("Can't log into registry %v, because %v", registryName, err)
 	}

@@ -1,15 +1,27 @@
 package cmd
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"text/tabwriter"
+
+	"github.com/hown3d/image-checker-k8s/k8s"
 	"github.com/opencontainers/go-digest"
+
+	"github.com/containers/image/v5/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/util/homedir"
-	"os"
-	"path/filepath"
 )
 
+type Options struct {
+	Ctx       context.Context
+	SysCtx    *types.SystemContext
+	TabWriter *tabwriter.Writer
+	K8s       *k8s.KubernetesConfig
+}
 
 var cfgFile string
 
@@ -42,8 +54,14 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	opts := Options{
-		DigestChache: make(map[string]*digest.Digest),
-		RegOptions: &registryOptions{},
+		Ctx:       context.Background(),
+		SysCtx:    &types.SystemContext{},
+		TabWriter: new(tabwriter.Writer),
+		K8s: &k8s.KubernetesConfig{
+			RegistryOpts: &k8s.RegistryOption{
+				DigestChache: make(map[string]*digest.Digest),
+			},
+		},
 	}
 
 	// Here you will define your flags and configuration settings.
@@ -51,13 +69,13 @@ func init() {
 	// will be global for your application.
 
 	if home := homedir.HomeDir(); home != "" {
-		rootCmd.PersistentFlags().StringVar(&opts.KubeConfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+		rootCmd.PersistentFlags().StringVar(&opts.K8s.KubeConfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {
-		rootCmd.PersistentFlags().StringVar(&opts.KubeConfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+		rootCmd.PersistentFlags().StringVar(&opts.K8s.KubeConfig, "kubeconfig", "", "absolute path to the kubeconfig file")
 	}
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.image-checker-k8s.yaml)")
 
-	rootCmd.PersistentFlags().StringVar(&opts.RegOptions.AuthFile, "authfile", os.Getenv("REGISTRY_AUTH_FILE"), "path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
+	//rootCmd.PersistentFlags().StringVar(&opts.RegOptions.AuthFile, "authfile", os.Getenv("REGISTRY_AUTH_FILE"), "path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
@@ -68,11 +86,9 @@ func init() {
 		updateCmd(&opts),
 		listCmd(&opts),
 		logoutCmd(&opts),
-		)
+	)
 
 }
-
-
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
@@ -100,4 +116,3 @@ func initConfig() {
 		log.Infof("Using config file: %v", viper.ConfigFileUsed())
 	}
 }
-

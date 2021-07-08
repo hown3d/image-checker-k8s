@@ -1,4 +1,4 @@
-module image-checker-k8s
+module github.com/hown3d/image-checker-k8s
 
 go 1.16
 

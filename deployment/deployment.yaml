@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: quarkus-with-argo-deployment
+  name: go-prom-deployment
   namespace: default
   labels:
-    app: quarkus-with-argo
+    app: go-prom
 spec:
   replicas: 1
   template:
     metadata:
-      name: quarkus-with-argo
+      name: go-prom
       labels:
-        app: quarkus-with-argo
+        app: go-prom
     spec:
       containers:
-        - name: quarkus-with-argo
-          image: hown3d/quarkus-with-argo:latest
+        - name: go-prom
+          image: hown3d/go-prom:1.0.0
           imagePullPolicy: IfNotPresent
       restartPolicy: Always
       imagePullSecrets:
         - name: regcred
   selector:
     matchLabels:
-      app: quarkus-with-argo
+      app: go-prom

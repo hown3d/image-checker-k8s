@@ -1,13 +1,12 @@
-
 package cmd
 
 import (
 	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
-
-func updateCmd(opts *Options) *cobra.Command{
+func updateCmd(opts *Options) *cobra.Command {
 
 	// cmd represents the login command
 	var cmd = &cobra.Command{
@@ -24,8 +23,6 @@ to quickly create a Cobra application.`,
 	return cmd
 }
 
-
 func (opts *Options) update(_ *cobra.Command, args []string) {
-	opts.createConfig()
 	fmt.Println("not implemented")
 }
