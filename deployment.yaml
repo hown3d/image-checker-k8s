@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-nginx-13
+  labels:
+    app: test-nginx
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: test-nginx
+      labels:
+        app: test-nginx
+    spec:
+      containers:
+        - name: test-nginx
+          image: nginx:1.20.0-perl
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+  selector:
+    matchLabels:
+      app: test-nginx
