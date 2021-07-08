@@ -2,17 +2,18 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"github.com/containers/common/pkg/auth"
 	"github.com/containers/image/v5/docker"
 	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/types"
 	"github.com/opencontainers/go-digest"
 	log "github.com/sirupsen/logrus"
+	"image-checker-k8s/pkg"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"os"
+	"strings"
 	"text/tabwriter"
 )
 
@@ -21,21 +22,20 @@ type Config struct {
 	SysCtx     *types.SystemContext
 	KubeClient *kubernetes.Clientset
 	TabWriter  *tabwriter.Writer
-
 }
 type registryOptions struct {
-	RegistryPassword string
-	RegistryUser string
-	AuthFile string
+	RegistryPassword        string
+	RegistryUser            string
+	AuthFile                string
 	LogOutFromAllRegistries bool
 }
 
 type Options struct {
-	RegOptions *registryOptions
-	KubeConfig       string
-	Config           *Config
-	DigestChache     map[string]*digest.Digest
-	Namespaces	[]string
+	RegOptions   *registryOptions
+	KubeConfig   string
+	Config       *Config
+	DigestChache map[string]*digest.Digest
+	Namespaces   []string
 }
 
 func CreateClientSet(kubeConfigPath string) (clientset *kubernetes.Clientset, err error) {
@@ -58,22 +58,19 @@ func (opts *Options) createConfig() {
 		SysCtx: &types.SystemContext{
 			AuthFilePath: opts.RegOptions.AuthFile,
 		},
-		KubeClient:   clientSet,
-		TabWriter:    new(tabwriter.Writer),
+		KubeClient: clientSet,
+		TabWriter:  new(tabwriter.Writer),
 	}
 }
 
-func (opts *Options) GetImageOfContainers(namespaces []string) (map[string]string, error) {
+func (opts *Options) GetImageOfContainers(namespaces []string) (podImages map[string]string, err error) {
 	tabWriter := opts.Config.TabWriter
+	podImages = make(map[string]string)
 
-	tabWriter.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	_, err := fmt.Fprintln(tabWriter, "Pod\tImage\tDigest\tNamespace")
+	err = pkg.TabWriterInit("Pod\tImage\tInstalled Digest\tRegistry Digest\tNamespace", tabWriter)
 	if err != nil {
 		return nil, err
 	}
-	podImages := make(map[string]string)
-
-
 
 	for _, namespace := range namespaces {
 		pods, err := opts.Config.KubeClient.CoreV1().Pods(namespace).List(opts.Config.Ctx, metav1.ListOptions{})
@@ -82,15 +79,20 @@ func (opts *Options) GetImageOfContainers(namespaces []string) (map[string]strin
 		}
 		for _, pod := range pods.Items {
 			for _, container := range pod.Status.ContainerStatuses {
-					//imageSlice := strings.Split(container.ImageID, "@")
-					imageID := container.Image
+				//Name of Image (ex. docker.io/library/nginx:latest)
+				imageID := container.Image
 
-					podImages[container.Name] = imageID
-					imageDigest := opts.GetDigest(imageID)
-					fmt.Fprintf(tabWriter, "%v\t%v\t%v\t%v\t\n", pod.Name, imageID, imageDigest.String(), namespace)
+				installedDigest := strings.Split(container.ImageID, "@")[1]
+				podImages[container.Name] = imageID
+				registryDigest := opts.GetDigest(imageID)
+
+				//print to stdout
+				err = pkg.TabWriterWrite([]string{pod.Name, imageID, installedDigest[:25], registryDigest.String()[:25], namespace}, tabWriter)
+				if err != nil {
+					return nil, err
 				}
 			}
-
+		}
 
 	}
 	err = tabWriter.Flush()
@@ -98,21 +100,20 @@ func (opts *Options) GetImageOfContainers(namespaces []string) (map[string]strin
 		return nil, err
 
 	}
-	return podImages, nil
+	return podImages, err
 }
 
 func (opts *Options) LoginToRegistry(registryName string) error {
 	loginOpts := &auth.LoginOptions{
 		Username: opts.RegOptions.RegistryUser,
-		Stdin: os.Stdin,
-		Stdout: os.Stdout,
+		Stdin:    os.Stdin,
+		Stdout:   os.Stdout,
 	}
 	if opts.RegOptions.RegistryPassword != "" {
 		loginOpts.Password = opts.RegOptions.RegistryPassword
 	}
 	return auth.Login(opts.Config.Ctx, opts.Config.SysCtx, loginOpts, []string{registryName})
 }
-
 
 func (opts *Options) GetDigest(imageName string) *digest.Digest {
 	_, exists := opts.DigestChache[imageName]
