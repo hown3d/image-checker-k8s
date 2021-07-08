@@ -57,6 +57,7 @@ func init() {
 	}
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.image-checker-k8s.yaml)")
 
+	rootCmd.PersistentFlags().StringVar(&opts.RegOptions.AuthFile, "authfile", os.Getenv("REGISTRY_AUTH_FILE"), "path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")

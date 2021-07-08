@@ -3,7 +3,6 @@ package cmd
 import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 
@@ -25,7 +24,6 @@ to quickly create a Cobra application.`,
 	}
 	cmd.Flags().StringVarP(&opts.RegOptions.RegistryUser, "username", "u","", "username to login to registry (required if registry = true)")
 	cmd.Flags().StringVarP(&opts.RegOptions.RegistryPassword, "password", "p", "", "password to login to registry")
-	cmd.Flags().StringVar(&opts.RegOptions.AuthFile, "authfile", os.Getenv("REGISTRY_AUTH_FILE"), "path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
 	return cmd
 }
 

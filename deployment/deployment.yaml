@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quarkus-with-argo-deployment
+  namespace: default
+  labels:
+    app: quarkus-with-argo
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: quarkus-with-argo
+      labels:
+        app: quarkus-with-argo
+    spec:
+      containers:
+        - name: quarkus-with-argo
+          image: hown3d/quarkus-with-argo:latest
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: regcred
+  selector:
+    matchLabels:
+      app: quarkus-with-argo
