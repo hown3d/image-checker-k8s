@@ -4,10 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"text/tabwriter"
 
 	"github.com/hown3d/image-checker-k8s/k8s"
-	"github.com/hown3d/image-checker-k8s/pkg"
 	"github.com/opencontainers/go-digest"
 
 	"github.com/containers/image/v5/types"
@@ -18,10 +16,9 @@ import (
 )
 
 type Options struct {
-	Ctx       context.Context
-	SysCtx    *types.SystemContext
-	TabWriter *pkg.TabWriter
-	K8s       *k8s.KubernetesConfig
+	Ctx    context.Context
+	SysCtx *types.SystemContext
+	K8s    *k8s.KubernetesConfig
 }
 
 var cfgFile string
@@ -57,11 +54,9 @@ func init() {
 	opts := Options{
 		Ctx:    context.Background(),
 		SysCtx: &types.SystemContext{},
-		TabWriter: &pkg.TabWriter{
-			Writer: &tabwriter.Writer{},
-		},
 		K8s: &k8s.KubernetesConfig{
 			RegistryOpts: &k8s.RegistryOption{
+				SysCtx:       &types.SystemContext{},
 				DigestChache: make(map[string]*digest.Digest),
 			},
 		},

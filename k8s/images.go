@@ -19,33 +19,39 @@ type RegistryOption struct {
 	RegistryUser            string
 	LogOutFromAllRegistries bool
 	DigestChache            map[string]*digest.Digest
+	SysCtx                  *types.SystemContext
 }
 
-func (opts *RegistryOption) GetDigests(image, imageID string, sysCtx *types.SystemContext) (installedDigest, registryDigest string) {
+func (opts *RegistryOption) GetDigests(image, imageID string) (installedDigest, registryDigest string) {
 	installedDigest = strings.Split(imageID, "@")[1]
-	registryDigest = opts.GetRegistryDigest(image, sysCtx).String()
+	registryDigest = opts.getRegistryDigest(image).String()
 	return
 }
 
-func (opts *RegistryOption) IsNewImage(image, imageID string, sysCtx *types.SystemContext) bool {
-	installedDigest, registryDigest := opts.GetDigests(image, imageID, sysCtx)
+func (opts *RegistryOption) IsNewImage(image, imageID string) bool {
+	installedDigest, registryDigest := opts.GetDigests(image, imageID)
 	if installedDigest != registryDigest {
 		return true
 	}
 	return false
 }
 
-func (opts *RegistryOption) LogoutFromRegistry(registryName string, sysCtx *types.SystemContext) error {
+func (opts *RegistryOption) LogoutFromRegistry(registryName string) error {
+	var logoutArgs []string
 	logoutOpts := &auth.LogoutOptions{
 		All:    opts.LogOutFromAllRegistries,
 		Stdout: os.Stdout,
 	}
 
-	return auth.Logout(sysCtx, logoutOpts, []string{registryName})
+	if logoutOpts.All == false {
+		logoutArgs[0] = registryName
+	}
+
+	return auth.Logout(opts.SysCtx, logoutOpts, logoutArgs)
 
 }
 
-func (opts *RegistryOption) LoginToRegistry(registryName string, sysCtx *types.SystemContext) error {
+func (opts *RegistryOption) LoginToRegistry(registryName string) error {
 	loginOpts := &auth.LoginOptions{
 		Username: opts.RegistryUser,
 		Stdin:    os.Stdin,
@@ -54,10 +60,10 @@ func (opts *RegistryOption) LoginToRegistry(registryName string, sysCtx *types.S
 	if opts.RegistryPassword != "" {
 		loginOpts.Password = opts.RegistryPassword
 	}
-	return auth.Login(context.Background(), sysCtx, loginOpts, []string{registryName})
+	return auth.Login(context.Background(), opts.SysCtx, loginOpts, []string{registryName})
 }
 
-func (opts *RegistryOption) GetRegistryDigest(imageName string, sysCtx *types.SystemContext) *digest.Digest {
+func (opts *RegistryOption) getRegistryDigest(imageName string) *digest.Digest {
 
 	//Image can include digest (from earlier update)
 	imageName = strings.Split(imageName, "@")[0]
@@ -73,7 +79,7 @@ func (opts *RegistryOption) GetRegistryDigest(imageName string, sysCtx *types.Sy
 
 	ctx := context.Background()
 
-	image, err := reference.NewImage(ctx, sysCtx)
+	image, err := reference.NewImage(ctx, opts.SysCtx)
 	if err != nil {
 		log.Fatalf("Can't create new Image, because %v", err)
 	}

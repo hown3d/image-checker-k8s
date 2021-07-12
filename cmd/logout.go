@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -19,11 +20,29 @@ to quickly create a Cobra application.`,
 		Run:  opts.logout,
 		Args: cobra.MaximumNArgs(1),
 	}
-	cmd.Flags().BoolVarP(&opts.K8s.RegistryOpts.LogOutFromAllRegistries, "all", "a", false, "specify if you want to logout from all registries")
+	cmd.Flags().BoolVarP(
+		&opts.K8s.RegistryOpts.LogOutFromAllRegistries,
+		"all",
+		"a",
+		false,
+		"specify if you want to logout from all registries",
+	)
+
 	return cmd
 }
 
 func (opts *Options) logout(_ *cobra.Command, args []string) {
-	registryName := args[0]
-	opts.K8s.RegistryOpts.LogoutFromRegistry(registryName, opts.SysCtx)
+	var registryName string
+
+	if len(args) == 0 && opts.K8s.RegistryOpts.LogOutFromAllRegistries != true {
+		log.Fatalf("Can't logout from all registries and specify a registry!")
+	}
+	if len(args) > 0 {
+		registryName = args[0]
+	}
+
+	err := opts.K8s.RegistryOpts.LogoutFromRegistry(registryName)
+	if err != nil {
+		log.Errorf("%v", err)
+	}
 }

@@ -26,11 +26,9 @@ to quickly create a Cobra application.`,
 }
 
 func (opts *Options) login(_ *cobra.Command, args []string) {
-
 	registryName := args[0]
-
-	err := opts.K8s.RegistryOpts.LoginToRegistry(registryName, opts.SysCtx)
+	err := opts.K8s.RegistryOpts.LoginToRegistry(registryName)
 	if err != nil {
-		log.Errorf("Can't log into registry %v, because %v", registryName, err)
+		log.Errorf("%v", err)
 	}
 }

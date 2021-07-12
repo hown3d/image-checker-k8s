@@ -29,7 +29,7 @@ func (opts *Options) update(_ *cobra.Command, args []string) {
 		opts.K8s.NewClientSet()
 	}
 
-	err := opts.K8s.GetRessourcesToUpdate(&metav1.ListOptions{}, opts.SysCtx)
+	err := opts.K8s.GetRessourcesToUpdate(&metav1.ListOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}

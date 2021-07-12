@@ -1,28 +1,27 @@
-package pkg
+package util
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"text/tabwriter"
 )
 
 type Writer interface {
-	Init(header interface{})
-	Write(toPrint ...interface{})
+	Init(header interface{}, w *io.Writer)
+	Write(w *io.Writer, toPrint ...interface{})
 }
 
-type TabWriter struct {
-	Writer *tabwriter.Writer
-}
+type TabWriter struct{}
 
-func (w TabWriter) Init(header string) {
+func (tabWriter TabWriter) Init(header string, w *tabwriter.Writer) {
 
-	w.Writer.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintln(w.Writer, header)
+	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Fprintln(w, header)
 
 }
 
-func (w TabWriter) Write(toPrint ...string) {
-	fmt.Fprintln(w.Writer, strings.Join(toPrint, "\t"))
+func (tabWriter TabWriter) Write(w *tabwriter.Writer, toPrint ...string) {
+	fmt.Fprintln(w, strings.Join(toPrint, "\t"))
 }

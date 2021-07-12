@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"os"
+	"text/tabwriter"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,13 +33,18 @@ func (opts *Options) list(_ *cobra.Command, _ []string) {
 		opts.K8s.NewClientSet()
 	}
 
-	tabWriter := opts.TabWriter
-	tabWriter.Init("Image\tInstalled Digest\tRegistry Digest\tChange")
+	if opts.K8s.Writer == nil {
+		opts.K8s.Writer = os.Stdout
+	}
 
-	err := opts.K8s.GetImageOfContainers(&metav1.ListOptions{}, tabWriter, opts.SysCtx)
+	tabWriter := tabwriter.NewWriter(opts.K8s.Writer, 0, 8, 0, '\t', 0)
+
+	tabWriter.Write([]byte("Image\tInstalled Digest\tRegistry Digest\tChange"))
+
+	err := opts.K8s.GetImageOfContainers(&metav1.ListOptions{}, tabWriter)
 	if err != nil {
 		log.Errorf("Can't get Image of Containers, because %v", err)
 	}
 
-	tabWriter.Writer.Flush()
+	tabWriter.Flush()
 }

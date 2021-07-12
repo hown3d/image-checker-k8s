@@ -3,12 +3,11 @@ package k8s
 import (
 	"context"
 	"errors"
+	"io"
 	"sync"
 
-	"github.com/hown3d/image-checker-k8s/pkg"
 	"github.com/sirupsen/logrus"
 
-	"github.com/containers/image/v5/types"
 	//v1 "k8s.io/api/core/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +20,8 @@ type KubernetesConfig struct {
 	KubeConfig       string
 	KubeClient       *kubernetes.Clientset
 	RegistryOpts     *RegistryOption
-	UpdateAnnotation string
+	updateAnnotation string
+	Writer           io.Writer
 }
 
 type podOwnerMetaData struct {
@@ -78,7 +78,7 @@ func (k *KubernetesConfig) updateTemplateSpec(podTemplate *apiv1.PodTemplateSpec
 	}
 }
 
-func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwnerMetaData, sysCtx *types.SystemContext) error {
+func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwnerMetaData) error {
 	ctx := context.Background()
 	getOpts := metav1.GetOptions{}
 	updateOpts := metav1.UpdateOptions{}
@@ -91,9 +91,9 @@ func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwne
 			return err
 		}
 		k.updateTemplateSpec(&deployment.Spec.Template, newImage)
-		_, exists := deployment.Annotations[k.UpdateAnnotation]
+		_, exists := deployment.Annotations[k.updateAnnotation]
 		if exists == false {
-			deployment.Annotations[k.UpdateAnnotation] = "kekw"
+			deployment.Annotations[k.updateAnnotation] = "kekw"
 		}
 		_, err = deploymentClient.Update(ctx, deployment, updateOpts)
 		return err
@@ -104,7 +104,7 @@ func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwne
 	return nil
 }
 
-func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions, sysCtx *types.SystemContext) error {
+func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions) error {
 
 	for _, namespace := range k.Namespaces {
 		logrus.Infof("Checking Namespace %v", namespace)
@@ -118,21 +118,21 @@ func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions, s
 				return err
 			}
 			logrus.Infof("Checking pod %v", pod.Name)
-			k.updateSetIfNeeded(podOwnerData, sysCtx)
+			k.updateSetIfNeeded(podOwnerData)
 		}
 
 	}
 	return nil
 }
 
-func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData, sysCtx *types.SystemContext) error {
+func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData) error {
 	for _, currentContainer := range *podOwnerMeta.containers {
-		if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID, sysCtx) {
+		if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID) {
 			logrus.Infof("Container %v needs update, new digest found for image %v", currentContainer.Name, currentContainer.Image)
-			_, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID, sysCtx)
+			_, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID)
 			newImage := currentContainer.Image + "@" + registryDigest
 			logrus.Infof("New Image is %v", newImage)
-			return k.updateResource(newImage, podOwnerMeta, sysCtx)
+			return k.updateResource(newImage, podOwnerMeta)
 		}
 
 	}
@@ -141,8 +141,7 @@ func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData, sys
 
 func (k *KubernetesConfig) GetImageOfContainers(
 	listOpts *metav1.ListOptions,
-	tabWriter *pkg.TabWriter,
-	sysCtx *types.SystemContext) (err error) {
+	writer io.Writer) (err error) {
 
 	c := make(chan apiv1.ContainerStatus)
 	var wg sync.WaitGroup
@@ -157,13 +156,14 @@ func (k *KubernetesConfig) GetImageOfContainers(
 				}
 				needsChange := ""
 
-				if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID, sysCtx) {
+				if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID) {
 					needsChange = "X"
 				}
-				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID, sysCtx)
+				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID)
 				//print to stdout
-				toPrint := []string{currentContainer.Image, installedDigest[:25], registryDigest[:25], needsChange}
-				tabWriter.Write(toPrint...)
+				toPrint := []byte(currentContainer.Image + "\t" + installedDigest[:25] + "\t" + registryDigest[:25] + "\t" + needsChange)
+				writer.Write(toPrint)
+
 			}
 		}(c)
 	}
