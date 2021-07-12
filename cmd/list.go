@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"github.com/hown3d/image-checker-k8s/pkg"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,15 +31,12 @@ func (opts *Options) list(_ *cobra.Command, _ []string) {
 	}
 
 	tabWriter := opts.TabWriter
-	err := pkg.TabWriterInit("Image\tInstalled Digest\tRegistry Digest\tChange", tabWriter)
-	if err != nil {
-		log.Errorf("Can't write to tabWriter, because %v", err)
-	}
+	tabWriter.Init("Image\tInstalled Digest\tRegistry Digest\tChange")
 
-	err = opts.K8s.GetImageOfContainers(&metav1.ListOptions{}, tabWriter, opts.SysCtx)
+	err := opts.K8s.GetImageOfContainers(&metav1.ListOptions{}, tabWriter, opts.SysCtx)
 	if err != nil {
 		log.Errorf("Can't get Image of Containers, because %v", err)
 	}
 
-	tabWriter.Flush()
+	tabWriter.Writer.Flush()
 }

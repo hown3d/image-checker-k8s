@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/hown3d/image-checker-k8s/k8s"
+	"github.com/hown3d/image-checker-k8s/pkg"
 	"github.com/opencontainers/go-digest"
 
 	"github.com/containers/image/v5/types"
@@ -19,7 +20,7 @@ import (
 type Options struct {
 	Ctx       context.Context
 	SysCtx    *types.SystemContext
-	TabWriter *tabwriter.Writer
+	TabWriter *pkg.TabWriter
 	K8s       *k8s.KubernetesConfig
 }
 
@@ -54,9 +55,11 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	opts := Options{
-		Ctx:       context.Background(),
-		SysCtx:    &types.SystemContext{},
-		TabWriter: new(tabwriter.Writer),
+		Ctx:    context.Background(),
+		SysCtx: &types.SystemContext{},
+		TabWriter: &pkg.TabWriter{
+			Writer: &tabwriter.Writer{},
+		},
 		K8s: &k8s.KubernetesConfig{
 			RegistryOpts: &k8s.RegistryOption{
 				DigestChache: make(map[string]*digest.Digest),

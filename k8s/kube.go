@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"text/tabwriter"
 
 	"github.com/hown3d/image-checker-k8s/pkg"
 	"github.com/sirupsen/logrus"
@@ -142,7 +141,7 @@ func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData, sys
 
 func (k *KubernetesConfig) GetImageOfContainers(
 	listOpts *metav1.ListOptions,
-	tabWriter *tabwriter.Writer,
+	tabWriter *pkg.TabWriter,
 	sysCtx *types.SystemContext) (err error) {
 
 	c := make(chan apiv1.ContainerStatus)
@@ -163,7 +162,8 @@ func (k *KubernetesConfig) GetImageOfContainers(
 				}
 				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID, sysCtx)
 				//print to stdout
-				err = pkg.TabWriterWrite([]string{currentContainer.Image, installedDigest[:25], registryDigest[:25], needsChange}, tabWriter)
+				toPrint := []string{currentContainer.Image, installedDigest[:25], registryDigest[:25], needsChange}
+				tabWriter.Write(toPrint...)
 			}
 		}(c)
 	}

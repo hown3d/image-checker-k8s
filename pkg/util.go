@@ -7,21 +7,22 @@ import (
 	"text/tabwriter"
 )
 
-func TabWriterInit(header string, tabWriter *tabwriter.Writer) error {
-
-	tabWriter.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	_, err := fmt.Fprintln(tabWriter, header)
-	if err != nil {
-		return err
-	}
-	return nil
+type Writer interface {
+	Init(header interface{})
+	Write(toPrint ...interface{})
 }
 
-func TabWriterWrite(toPrint []string, tabWriter *tabwriter.Writer) error {
-	_, err := fmt.Fprintln(tabWriter, strings.Join(toPrint, "\t"))
-	if err != nil {
-		return err
-	}
-	return nil
+type TabWriter struct {
+	Writer *tabwriter.Writer
+}
 
+func (w TabWriter) Init(header string) {
+
+	w.Writer.Init(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Fprintln(w.Writer, header)
+
+}
+
+func (w TabWriter) Write(toPrint ...string) {
+	fmt.Fprintln(w.Writer, strings.Join(toPrint, "\t"))
 }
