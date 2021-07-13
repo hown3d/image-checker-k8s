@@ -46,8 +46,12 @@ func (k *KubernetesConfig) NewClientSet() (err error) {
 }
 
 func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions) error {
+	namespaces, err := k.getNamespaces()
 
-	for _, namespace := range k.Namespaces {
+	if err != nil {
+		return err
+	}
+	for _, namespace := range namespaces {
 		log.Infof("Checking Namespace %v", namespace)
 		pods, err := k.KubeClient.CoreV1().Pods(namespace).List(context.Background(), *listOpts)
 		if err != nil {
@@ -56,7 +60,8 @@ func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions) e
 		for _, pod := range pods.Items {
 			podOwnerData, err := k.getPodOwner(namespace, &pod)
 			if err != nil {
-				return err
+				log.Errorf("Pod Owner couldn't be fetched: %v", err)
+				continue
 			}
 			log.Infof("Checking pod %v", pod.Name)
 			k.updateSetIfNeeded(podOwnerData)
@@ -95,22 +100,14 @@ func (k *KubernetesConfig) GetImageOfContainers(
 		}(c)
 	}
 
-	var namespacesSlice []string
-	if k.AllNamespaces == true {
-		namespaces, err := k.getAllNamespaces()
-		if err != nil {
-			return err
-		}
-		for _, namespace := range namespaces {
-			namespacesSlice = append(namespacesSlice, namespace.Name)
-		}
-	} else {
-		namespacesSlice = k.Namespaces
+	namespaces, err := k.getNamespaces()
+	if err != nil {
+		return
 	}
 
-	log.Infof("Listing all pods in Namespaces %v", namespacesSlice)
+	log.Infof("Listing all pods in Namespaces %v", namespaces)
 
-	for _, namespace := range namespacesSlice {
+	for _, namespace := range namespaces {
 		pods, err := k.KubeClient.CoreV1().Pods(namespace).List(context.Background(), *listOpts)
 		if err != nil {
 			return err
@@ -156,10 +153,12 @@ func (k *KubernetesConfig) getPodOwner(namespace string, pod *apiv1.Pod) (*podOw
 				return nil, err
 			}
 			return &podOwnerMetaData{pod, statefulSet.Name, statefulSet.Name}, nil
+		default:
+			return nil, errors.New("Can't update Pod with owner: " + owner.Kind)
+
 		}
 	}
-	return nil, errors.New("Pod has no Owners, ???")
-
+	return nil, nil
 }
 
 func (k *KubernetesConfig) updateTemplateSpec(podTemplate *apiv1.PodTemplateSpec, newImage string) {
@@ -214,14 +213,21 @@ func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData) err
 }
 
 //Use Kubernetes API to return all Namespaces that are currently in the cluster
-func (k *KubernetesConfig) getAllNamespaces() ([]apiv1.Namespace, error) {
+func (k *KubernetesConfig) getNamespaces() (namespaces []string, err error) {
 
 	ctx := context.Background()
-	listOpts := metav1.ListOptions{}
-	namespaces, err := k.KubeClient.CoreV1().Namespaces().List(ctx, listOpts)
-	if err != nil {
-		return nil, err
+	if k.AllNamespaces == true {
+		listOpts := metav1.ListOptions{}
+		namespacesList, err := k.KubeClient.CoreV1().Namespaces().List(ctx, listOpts)
+		if err != nil {
+			return nil, err
+		}
+		for _, namespace := range namespacesList.Items {
+			namespaces = append(namespaces, namespace.Name)
+		}
+	} else {
+		namespaces = k.Namespaces
 	}
-	return namespaces.Items, nil
+	return namespaces, nil
 
 }

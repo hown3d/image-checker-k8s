@@ -21,6 +21,7 @@ to quickly create a Cobra application.`,
 		Run: opts.update,
 	}
 	cmd.Flags().StringSliceVarP(&opts.K8s.Namespaces, "namespaces", "n", []string{"default"}, "namespaces to look for pods in")
+	cmd.Flags().BoolVarP(&opts.K8s.AllNamespaces, "all", "a", false, "if all namespaces should be checked for a new image")
 	return cmd
 }
 
@@ -35,7 +36,7 @@ func (opts *Options) update(_ *cobra.Command, args []string) {
 
 	err := opts.K8s.GetRessourcesToUpdate(&metav1.ListOptions{})
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
 	}
 
 }
