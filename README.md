@@ -24,6 +24,17 @@ Flags:
 Use "image-checker-k8s [command] --help" for more information about a command.
 ```
 
+## Examples
+Run updates on all pods in namespace "test"
+```
+$ image-checker-k8s update -n test
+```
+
+List images with installed Digest and remote Digest in all namespaces
+```
+$ image-checker-k8s list --all
+```
+
 ## Development
 - Build `go build`
 - Run `./image-checker-k8s --help`
