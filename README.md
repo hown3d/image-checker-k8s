@@ -1,5 +1,5 @@
 # Image-checker for Kubernetes
-This tool tries to solve to the problem of containers running in kubernetes with an old build version of a certain tag. Without updating, securit updates might be missed and containers get vulnerable for attacks.
+This tool tries to solve to the problem of containers running in kubernetes with an old build version of a certain image. Without updating, securit updates might be missed and containers get vulnerable for attacks.
 
 ## Usage
 ```
