@@ -18,7 +18,7 @@ Available Commands:
 Flags:
       --config string       config file (default is $HOME/.image-checker-k8s.yaml)
   -h, --help                help for image-checker-k8s
-      --kubeconfig string   (optional) absolute path to the kubeconfig file (default "/Users/hoehl/.kube/config")
+      --kubeconfig string   (optional) absolute path to the kubeconfig file (default "$HOME/.kube/config")
   -t, --toggle              Help message for toggle
 
 Use "image-checker-k8s [command] --help" for more information about a command.
