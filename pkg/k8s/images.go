@@ -24,17 +24,31 @@ type RegistryOption struct {
 
 func (opts *RegistryOption) GetDigests(image, imageID string) (installedDigest, registryDigest string) {
 	log.Infof("Getting digests for image %v with ID %v", image, imageID)
+
 	imageIDSplit := strings.Split(imageID, "@")
 
-	//Case when imageID is only SHA256, not image@SHA256...
-	if len(imageIDSplit) < 2 {
-		installedDigest = imageIDSplit[0]
-	} else {
+	installedDigest = imageIDSplit[0]
+
+	//Case when imageID is image@SHA256, not only SHA256...
+	if imageContainsDigest(imageID) {
 		installedDigest = imageIDSplit[1]
+	}
+
+	//Case when Image already has digest because of previous update
+	if imageContainsDigest(image) {
+		image = strings.Split(image, "@")[0]
 	}
 
 	registryDigest = opts.getRegistryDigest(image).String()
 	return
+}
+
+func imageContainsDigest(image string) bool {
+	nameSplit := strings.Split(image, "@")
+	if len(nameSplit) < 2 {
+		return false
+	}
+	return true
 }
 
 func (opts *RegistryOption) IsNewImage(image, imageID string) bool {
@@ -72,10 +86,11 @@ func (opts *RegistryOption) LoginToRegistry(registryName string) error {
 	return auth.Login(context.Background(), opts.SysCtx, loginOpts, []string{registryName})
 }
 
+// Fetches latest digest from registry
+//Image can include digest (from earlier update)
+// Make sure to trim digest before parsing!
 func (opts *RegistryOption) getRegistryDigest(imageName string) *digest.Digest {
 
-	//Image can include digest (from earlier update)
-	imageName = strings.Split(imageName, "@")[0]
 	_, exists := opts.DigestChache[imageName]
 	if exists == true {
 		return opts.DigestChache[imageName]

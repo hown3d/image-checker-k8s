@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -26,10 +27,14 @@ type KubernetesConfig struct {
 }
 
 type podOwnerMetaData struct {
-	pod        *apiv1.Pod
-	containers *[]apiv1.ContainerStatus
-	ownerName  string
-	kind       string
+	pod       *apiv1.Pod
+	ownerName string
+	kind      string
+}
+
+type containerImageCombi struct {
+	Image   string
+	ImageID string
 }
 
 func (k *KubernetesConfig) NewClientSet() (err error) {
@@ -65,25 +70,25 @@ func (k *KubernetesConfig) GetImageOfContainers(
 	listOpts *metav1.ListOptions,
 	writer io.Writer) (err error) {
 
-	c := make(chan apiv1.ContainerStatus)
+	c := make(chan containerImageCombi)
 	var wg sync.WaitGroup
 	wg.Add(10)
 	for ii := 0; ii < 10; ii++ {
-		go func(c chan apiv1.ContainerStatus) {
+		go func(c chan containerImageCombi) {
 			for {
-				currentContainer, more := <-c
+				currentContainerImage, more := <-c
 				if more == false {
 					wg.Done()
 					return
 				}
 				needsChange := ""
 
-				if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID) {
+				if k.RegistryOpts.IsNewImage(currentContainerImage.Image, currentContainerImage.ImageID) {
 					needsChange = "X"
 				}
-				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID)
+				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainerImage.Image, currentContainerImage.ImageID)
 				//print to stdout
-				toPrint := []byte(currentContainer.Image + "\t" + installedDigest[:25] + "\t" + registryDigest[:25] + "\t" + needsChange + "\n")
+				toPrint := []byte(currentContainerImage.Image + "\t" + installedDigest[:25] + "\t" + registryDigest[:25] + "\t" + needsChange + "\n")
 				writer.Write(toPrint)
 
 			}
@@ -111,8 +116,10 @@ func (k *KubernetesConfig) GetImageOfContainers(
 			return err
 		}
 		for _, pod := range pods.Items {
-			for _, container := range pod.Status.ContainerStatuses {
-				c <- container
+			containerStatus := pod.Status.ContainerStatuses
+			containers := pod.Spec.Containers
+			for index := range containers {
+				c <- containerImageCombi{Image: containers[index].Image, ImageID: containerStatus[index].ImageID}
 			}
 		}
 
@@ -135,20 +142,20 @@ func (k *KubernetesConfig) getPodOwner(namespace string, pod *apiv1.Pod) (*podOw
 			}
 			// dont know why this is a for loop, idk if a pod can have more then 1 owner
 			for _, rsOwner := range replicaSet.OwnerReferences {
-				return &podOwnerMetaData{pod, &pod.Status.ContainerStatuses, rsOwner.Name, rsOwner.Kind}, nil
+				return &podOwnerMetaData{pod, rsOwner.Name, rsOwner.Kind}, nil
 			}
 		case "DaemonSet":
 			daemonSet, err := appsClient.DaemonSets(namespace).Get(ctx, owner.Name, getOpts)
 			if err != nil {
 				return nil, err
 			}
-			return &podOwnerMetaData{pod, &pod.Status.ContainerStatuses, daemonSet.Name, daemonSet.Kind}, nil
+			return &podOwnerMetaData{pod, daemonSet.Name, daemonSet.Kind}, nil
 		case "StatefulSet":
 			statefulSet, err := appsClient.StatefulSets(namespace).Get(ctx, owner.Name, getOpts)
 			if err != nil {
 				return nil, err
 			}
-			return &podOwnerMetaData{pod, &pod.Status.ContainerStatuses, statefulSet.Name, statefulSet.Name}, nil
+			return &podOwnerMetaData{pod, statefulSet.Name, statefulSet.Name}, nil
 		}
 	}
 	return nil, errors.New("Pod has no Owners, ???")
@@ -175,11 +182,6 @@ func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwne
 			return err
 		}
 		k.updateTemplateSpec(&deployment.Spec.Template, newImage)
-		// _, exists := deployment.Annotations[k.updateAnnotation]
-		// if exists == false {
-		// 	deployment.Annotations[k.updateAnnotation] = "kekw"
-		// }
-		log.Info(deployment)
 		_, err = deploymentClient.Update(ctx, deployment, updateOpts)
 		return err
 
@@ -190,11 +192,19 @@ func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwne
 }
 
 func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData) error {
-	for _, currentContainer := range *podOwnerMeta.containers {
-		if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID) {
-			log.Infof("Container %v needs update, new digest found for image %v", currentContainer.Name, currentContainer.Image)
-			_, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID)
-			newImage := currentContainer.Image + "@" + registryDigest
+	containerStatus := podOwnerMeta.pod.Status.ContainerStatuses
+	containers := podOwnerMeta.pod.Spec.Containers
+
+	for index := range containers {
+		currentContainerStatus := containerStatus[index]
+		currentContainer := containers[index]
+
+		if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainerStatus.ImageID) {
+			log.Infof("Container %v needs update, new digest found for image %v", currentContainer.Name, currentContainerStatus.Image)
+			_, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainerStatus.ImageID)
+
+			// Image might already contain sha, because of previous update
+			newImage := strings.Split(currentContainer.Image, "@")[0] + "@" + registryDigest
 			log.Infof("New Image is %v", newImage)
 			return k.updateResource(newImage, podOwnerMeta)
 		}
