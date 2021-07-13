@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hown3d/image-checker-k8s/k8s"
+	"github.com/hown3d/image-checker-k8s/pkg/k8s"
 	"github.com/opencontainers/go-digest"
 
 	"github.com/containers/image/v5/types"
@@ -16,9 +16,9 @@ import (
 )
 
 type Options struct {
-	Ctx    context.Context
-	SysCtx *types.SystemContext
-	K8s    *k8s.KubernetesConfig
+	Ctx context.Context
+	//SysCtx *types.SystemContext
+	K8s *k8s.KubernetesConfig
 }
 
 var cfgFile string
@@ -52,8 +52,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	opts := Options{
-		Ctx:    context.Background(),
-		SysCtx: &types.SystemContext{},
+		Ctx: context.Background(),
+		//SysCtx: &types.SystemContext{},
 		K8s: &k8s.KubernetesConfig{
 			RegistryOpts: &k8s.RegistryOption{
 				SysCtx:       &types.SystemContext{},

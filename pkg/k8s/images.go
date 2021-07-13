@@ -23,7 +23,16 @@ type RegistryOption struct {
 }
 
 func (opts *RegistryOption) GetDigests(image, imageID string) (installedDigest, registryDigest string) {
-	installedDigest = strings.Split(imageID, "@")[1]
+	log.Infof("Getting digests for image %v with ID %v", image, imageID)
+	imageIDSplit := strings.Split(imageID, "@")
+
+	//Case when imageID is only SHA256, not image@SHA256...
+	if len(imageIDSplit) < 2 {
+		installedDigest = imageIDSplit[0]
+	} else {
+		installedDigest = imageIDSplit[1]
+	}
+
 	registryDigest = opts.getRegistryDigest(image).String()
 	return
 }

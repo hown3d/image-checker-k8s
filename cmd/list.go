@@ -24,13 +24,18 @@ to quickly create a Cobra application.`,
 		Run: opts.list,
 	}
 	cmd.Flags().StringSliceVarP(&opts.K8s.Namespaces, "namespaces", "n", []string{"default"}, "namespaces to look for pods in")
+	cmd.Flags().BoolVarP(&opts.K8s.AllNamespaces, "all", "a", false, "use all namespaces for query")
 	return cmd
 }
 
 func (opts *Options) list(_ *cobra.Command, _ []string) {
 
 	if opts.K8s.KubeClient == nil {
-		opts.K8s.NewClientSet()
+		err := opts.K8s.NewClientSet()
+		if err != nil {
+			log.Fatal(err)
+		}
+
 	}
 
 	if opts.K8s.Writer == nil {
@@ -39,12 +44,19 @@ func (opts *Options) list(_ *cobra.Command, _ []string) {
 
 	tabWriter := tabwriter.NewWriter(opts.K8s.Writer, 0, 8, 0, '\t', 0)
 
-	tabWriter.Write([]byte("Image\tInstalled Digest\tRegistry Digest\tChange"))
+	_, err := tabWriter.Write([]byte("Image\tInstalled Digest\tRegistry Digest\tChange\n"))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	err := opts.K8s.GetImageOfContainers(&metav1.ListOptions{}, tabWriter)
+	err = opts.K8s.GetImageOfContainers(&metav1.ListOptions{}, tabWriter)
 	if err != nil {
 		log.Errorf("Can't get Image of Containers, because %v", err)
 	}
 
-	tabWriter.Flush()
+	err = tabWriter.Flush()
+	if err != nil {
+		log.Error(err)
+	}
+
 }

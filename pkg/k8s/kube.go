@@ -6,7 +6,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 
 	//v1 "k8s.io/api/core/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -17,6 +17,7 @@ import (
 
 type KubernetesConfig struct {
 	Namespaces       []string
+	AllNamespaces    bool
 	KubeConfig       string
 	KubeClient       *kubernetes.Clientset
 	RegistryOpts     *RegistryOption
@@ -38,6 +39,89 @@ func (k *KubernetesConfig) NewClientSet() (err error) {
 	k.KubeClient, err = kubernetes.NewForConfig(kubeConfig)
 	return
 }
+
+func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions) error {
+
+	for _, namespace := range k.Namespaces {
+		log.Infof("Checking Namespace %v", namespace)
+		pods, err := k.KubeClient.CoreV1().Pods(namespace).List(context.Background(), *listOpts)
+		if err != nil {
+			return err
+		}
+		for _, pod := range pods.Items {
+			podOwnerData, err := k.getPodOwner(namespace, &pod)
+			if err != nil {
+				return err
+			}
+			log.Infof("Checking pod %v", pod.Name)
+			k.updateSetIfNeeded(podOwnerData)
+		}
+
+	}
+	return nil
+}
+
+func (k *KubernetesConfig) GetImageOfContainers(
+	listOpts *metav1.ListOptions,
+	writer io.Writer) (err error) {
+
+	c := make(chan apiv1.ContainerStatus)
+	var wg sync.WaitGroup
+	wg.Add(10)
+	for ii := 0; ii < 10; ii++ {
+		go func(c chan apiv1.ContainerStatus) {
+			for {
+				currentContainer, more := <-c
+				if more == false {
+					wg.Done()
+					return
+				}
+				needsChange := ""
+
+				if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID) {
+					needsChange = "X"
+				}
+				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID)
+				//print to stdout
+				toPrint := []byte(currentContainer.Image + "\t" + installedDigest[:25] + "\t" + registryDigest[:25] + "\t" + needsChange + "\n")
+				writer.Write(toPrint)
+
+			}
+		}(c)
+	}
+
+	var namespacesSlice []string
+	if k.AllNamespaces == true {
+		namespaces, err := k.getAllNamespaces()
+		if err != nil {
+			return err
+		}
+		for _, namespace := range namespaces {
+			namespacesSlice = append(namespacesSlice, namespace.Name)
+		}
+	} else {
+		namespacesSlice = k.Namespaces
+	}
+
+	log.Infof("Listing all pods in Namespaces %v", namespacesSlice)
+
+	for _, namespace := range namespacesSlice {
+		pods, err := k.KubeClient.CoreV1().Pods(namespace).List(context.Background(), *listOpts)
+		if err != nil {
+			return err
+		}
+		for _, pod := range pods.Items {
+			for _, container := range pod.Status.ContainerStatuses {
+				c <- container
+			}
+		}
+
+	}
+	close(c)
+	wg.Wait()
+	return err
+}
+
 func (k *KubernetesConfig) getPodOwner(namespace string, pod *apiv1.Pod) (*podOwnerMetaData, error) {
 	ctx := context.Background()
 	getOpts := metav1.GetOptions{}
@@ -86,15 +170,16 @@ func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwne
 	case "Deployment":
 		deploymentClient := k.KubeClient.AppsV1().Deployments(podOwnerMeta.pod.Namespace)
 		deployment, err := deploymentClient.Get(ctx, podOwnerMeta.ownerName, getOpts)
-		logrus.Infof("Updating Deployment %v", deployment.Name)
+		log.Infof("Updating Deployment %v", deployment.Name)
 		if err != nil {
 			return err
 		}
 		k.updateTemplateSpec(&deployment.Spec.Template, newImage)
-		_, exists := deployment.Annotations[k.updateAnnotation]
-		if exists == false {
-			deployment.Annotations[k.updateAnnotation] = "kekw"
-		}
+		// _, exists := deployment.Annotations[k.updateAnnotation]
+		// if exists == false {
+		// 	deployment.Annotations[k.updateAnnotation] = "kekw"
+		// }
+		log.Info(deployment)
 		_, err = deploymentClient.Update(ctx, deployment, updateOpts)
 		return err
 
@@ -104,34 +189,13 @@ func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwne
 	return nil
 }
 
-func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions) error {
-
-	for _, namespace := range k.Namespaces {
-		logrus.Infof("Checking Namespace %v", namespace)
-		pods, err := k.KubeClient.CoreV1().Pods(namespace).List(context.Background(), *listOpts)
-		if err != nil {
-			return err
-		}
-		for _, pod := range pods.Items {
-			podOwnerData, err := k.getPodOwner(namespace, &pod)
-			if err != nil {
-				return err
-			}
-			logrus.Infof("Checking pod %v", pod.Name)
-			k.updateSetIfNeeded(podOwnerData)
-		}
-
-	}
-	return nil
-}
-
 func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData) error {
 	for _, currentContainer := range *podOwnerMeta.containers {
 		if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID) {
-			logrus.Infof("Container %v needs update, new digest found for image %v", currentContainer.Name, currentContainer.Image)
+			log.Infof("Container %v needs update, new digest found for image %v", currentContainer.Name, currentContainer.Image)
 			_, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID)
 			newImage := currentContainer.Image + "@" + registryDigest
-			logrus.Infof("New Image is %v", newImage)
+			log.Infof("New Image is %v", newImage)
 			return k.updateResource(newImage, podOwnerMeta)
 		}
 
@@ -139,47 +203,15 @@ func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData) err
 	return nil
 }
 
-func (k *KubernetesConfig) GetImageOfContainers(
-	listOpts *metav1.ListOptions,
-	writer io.Writer) (err error) {
+//Use Kubernetes API to return all Namespaces that are currently in the cluster
+func (k *KubernetesConfig) getAllNamespaces() ([]apiv1.Namespace, error) {
 
-	c := make(chan apiv1.ContainerStatus)
-	var wg sync.WaitGroup
-	wg.Add(10)
-	for ii := 0; ii < 10; ii++ {
-		go func(c chan apiv1.ContainerStatus) {
-			for {
-				currentContainer, more := <-c
-				if more == false {
-					wg.Done()
-					return
-				}
-				needsChange := ""
-
-				if k.RegistryOpts.IsNewImage(currentContainer.Image, currentContainer.ImageID) {
-					needsChange = "X"
-				}
-				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainer.Image, currentContainer.ImageID)
-				//print to stdout
-				toPrint := []byte(currentContainer.Image + "\t" + installedDigest[:25] + "\t" + registryDigest[:25] + "\t" + needsChange)
-				writer.Write(toPrint)
-
-			}
-		}(c)
+	ctx := context.Background()
+	listOpts := metav1.ListOptions{}
+	namespaces, err := k.KubeClient.CoreV1().Namespaces().List(ctx, listOpts)
+	if err != nil {
+		return nil, err
 	}
-	for _, namespace := range k.Namespaces {
-		pods, err := k.KubeClient.CoreV1().Pods(namespace).List(context.Background(), *listOpts)
-		if err != nil {
-			return err
-		}
-		for _, pod := range pods.Items {
-			for _, container := range pod.Status.ContainerStatuses {
-				c <- container
-			}
-		}
+	return namespaces.Items, nil
 
-	}
-	close(c)
-	wg.Wait()
-	return err
 }

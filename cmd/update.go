@@ -26,7 +26,11 @@ to quickly create a Cobra application.`,
 
 func (opts *Options) update(_ *cobra.Command, args []string) {
 	if opts.K8s.KubeClient == nil {
-		opts.K8s.NewClientSet()
+		err := opts.K8s.NewClientSet()
+		if err != nil {
+			log.Fatal(err)
+		}
+
 	}
 
 	err := opts.K8s.GetRessourcesToUpdate(&metav1.ListOptions{})
