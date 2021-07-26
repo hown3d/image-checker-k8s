@@ -10,6 +10,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type podWithOwner struct {
+	pod       *apiv1.Pod
+	ownerName string
+	kind      string
+}
+
 func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions) error {
 	namespaces, err := k.getNamespaces()
 
@@ -23,20 +29,20 @@ func (k *KubernetesConfig) GetRessourcesToUpdate(listOpts *metav1.ListOptions) e
 			return err
 		}
 		for _, pod := range pods.Items {
-			podOwnerData, err := k.getPodOwner(namespace, &pod)
+			podData, err := k.getPodOwner(namespace, &pod)
 			if err != nil {
 				log.Errorf("Pod Owner couldn't be fetched: %v", err)
 				continue
 			}
 			log.Infof("Checking pod %v", pod.Name)
-			k.updateSetIfNeeded(podOwnerData)
+			k.checkForPodUpdate(podData)
 		}
 
 	}
 	return nil
 }
 
-func (k *KubernetesConfig) getPodOwner(namespace string, pod *apiv1.Pod) (*podOwnerMetaData, error) {
+func (k *KubernetesConfig) getPodOwner(namespace string, pod *apiv1.Pod) (*podWithOwner, error) {
 	ctx := context.Background()
 	getOpts := metav1.GetOptions{}
 	appsClient := k.KubeClient.AppsV1()
@@ -49,20 +55,20 @@ func (k *KubernetesConfig) getPodOwner(namespace string, pod *apiv1.Pod) (*podOw
 			}
 			// dont know why this is a for loop, idk if a pod can have more then 1 owner
 			for _, rsOwner := range replicaSet.OwnerReferences {
-				return &podOwnerMetaData{pod, rsOwner.Name, rsOwner.Kind}, nil
+				return &podWithOwner{pod, rsOwner.Name, rsOwner.Kind}, nil
 			}
 		case "DaemonSet":
 			daemonSet, err := appsClient.DaemonSets(namespace).Get(ctx, owner.Name, getOpts)
 			if err != nil {
 				return nil, err
 			}
-			return &podOwnerMetaData{pod, daemonSet.Name, daemonSet.Kind}, nil
+			return &podWithOwner{pod, daemonSet.Name, daemonSet.Kind}, nil
 		case "StatefulSet":
 			statefulSet, err := appsClient.StatefulSets(namespace).Get(ctx, owner.Name, getOpts)
 			if err != nil {
 				return nil, err
 			}
-			return &podOwnerMetaData{pod, statefulSet.Name, statefulSet.Name}, nil
+			return &podWithOwner{pod, statefulSet.Name, statefulSet.Name}, nil
 		default:
 			return nil, errors.New("Can't update Pod with owner: " + owner.Kind)
 
@@ -78,14 +84,14 @@ func (k *KubernetesConfig) updateTemplateSpec(podTemplate *apiv1.PodTemplateSpec
 	}
 }
 
-func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwnerMetaData) error {
+func (k *KubernetesConfig) updateResource(newImage string, podData *podWithOwner) error {
 	ctx := context.Background()
 	getOpts := metav1.GetOptions{}
 	updateOpts := metav1.UpdateOptions{}
-	switch podOwnerMeta.kind {
+	switch podData.kind {
 	case "Deployment":
-		deploymentClient := k.KubeClient.AppsV1().Deployments(podOwnerMeta.pod.Namespace)
-		deployment, err := deploymentClient.Get(ctx, podOwnerMeta.ownerName, getOpts)
+		deploymentClient := k.KubeClient.AppsV1().Deployments(podData.pod.Namespace)
+		deployment, err := deploymentClient.Get(ctx, podData.ownerName, getOpts)
 		log.Infof("Updating Deployment %v", deployment.Name)
 		if err != nil {
 			return err
@@ -100,9 +106,9 @@ func (k *KubernetesConfig) updateResource(newImage string, podOwnerMeta *podOwne
 	return nil
 }
 
-func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData) error {
-	containerStatus := podOwnerMeta.pod.Status.ContainerStatuses
-	containers := podOwnerMeta.pod.Spec.Containers
+func (k *KubernetesConfig) checkForPodUpdate(podData *podWithOwner) error {
+	containerStatus := podData.pod.Status.ContainerStatuses
+	containers := podData.pod.Spec.Containers
 
 	for index := range containers {
 		currentContainerStatus := containerStatus[index]
@@ -115,7 +121,7 @@ func (k *KubernetesConfig) updateSetIfNeeded(podOwnerMeta *podOwnerMetaData) err
 			// Image might already contain sha, because of previous update
 			newImage := strings.Split(currentContainer.Image, "@")[0] + "@" + registryDigest
 			log.Infof("New Image is %v", newImage)
-			return k.updateResource(newImage, podOwnerMeta)
+			return k.updateResource(newImage, podData)
 		}
 
 	}

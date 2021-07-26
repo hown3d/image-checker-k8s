@@ -45,18 +45,12 @@ func (opts *RegistryOption) GetDigests(image, imageID string) (installedDigest, 
 
 func imageContainsDigest(image string) bool {
 	nameSplit := strings.Split(image, "@")
-	if len(nameSplit) < 2 {
-		return false
-	}
-	return true
+	return len(nameSplit) >= 2
 }
 
 func (opts *RegistryOption) IsNewImage(image, imageID string) bool {
 	installedDigest, registryDigest := opts.GetDigests(image, imageID)
-	if installedDigest != registryDigest {
-		return true
-	}
-	return false
+	return installedDigest != registryDigest
 }
 
 func (opts *RegistryOption) LogoutFromRegistry(registryName string) error {
@@ -66,7 +60,7 @@ func (opts *RegistryOption) LogoutFromRegistry(registryName string) error {
 		Stdout: os.Stdout,
 	}
 
-	if logoutOpts.All == false {
+	if !logoutOpts.All {
 		logoutArgs[0] = registryName
 	}
 
@@ -92,7 +86,7 @@ func (opts *RegistryOption) LoginToRegistry(registryName string) error {
 func (opts *RegistryOption) getRegistryDigest(imageName string) *digest.Digest {
 
 	_, exists := opts.DigestChache[imageName]
-	if exists == true {
+	if exists {
 		return opts.DigestChache[imageName]
 	}
 

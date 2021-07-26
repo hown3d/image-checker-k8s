@@ -9,38 +9,39 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type containerImageCombi struct {
-	Image   string
-	ImageID string
+type containerImage struct {
+	image   string
+	imageid string
 }
 
 func (k *KubernetesConfig) GetImageOfContainers(
 	listOpts *metav1.ListOptions,
 	writer io.Writer) (err error) {
 
-	c := make(chan containerImageCombi)
+	c := make(chan containerImage)
 	var wg sync.WaitGroup
 	wg.Add(10)
+
 	for ii := 0; ii < 10; ii++ {
-		go func(c chan containerImageCombi) {
+		go func() {
 			for {
 				currentContainerImage, more := <-c
-				if more == false {
+				if !more {
 					wg.Done()
 					return
 				}
 				needsChange := ""
 
-				if k.RegistryOpts.IsNewImage(currentContainerImage.Image, currentContainerImage.ImageID) {
+				if k.RegistryOpts.IsNewImage(currentContainerImage.image, currentContainerImage.imageid) {
 					needsChange = "X"
 				}
-				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainerImage.Image, currentContainerImage.ImageID)
+				installedDigest, registryDigest := k.RegistryOpts.GetDigests(currentContainerImage.image, currentContainerImage.imageid)
 				//print to stdout
-				toPrint := []byte(currentContainerImage.Image + "\t" + installedDigest[:25] + "\t" + registryDigest[:25] + "\t" + needsChange + "\n")
+				toPrint := []byte(currentContainerImage.image + "\t" + installedDigest[:25] + "\t" + registryDigest[:25] + "\t" + needsChange + "\n")
 				writer.Write(toPrint)
 
 			}
-		}(c)
+		}()
 	}
 
 	namespaces, err := k.getNamespaces()
@@ -59,7 +60,7 @@ func (k *KubernetesConfig) GetImageOfContainers(
 			containerStatus := pod.Status.ContainerStatuses
 			containers := pod.Spec.Containers
 			for index := range containers {
-				c <- containerImageCombi{Image: containers[index].Image, ImageID: containerStatus[index].ImageID}
+				c <- containerImage{containers[index].Image, containerStatus[index].ImageID}
 			}
 		}
 
